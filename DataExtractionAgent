@@ -1,0 +1,49 @@
+AGENT DataExtractionAgent:
+    INITIALIZE:
+        - bedrock_client = BedrockAgentClient()
+        - supported_formats = [PDF, DOC, XLS, CSV, JSON, XML]
+        - extraction_models = [Claude, Titan]
+    
+    FUNCTION extract_data(document, extraction_schema):
+        TRY:
+            document_type = detect_document_type(document)
+            
+            IF document_type IN supported_formats:
+                preprocessed_doc = preprocess_document(document)
+                
+                prompt = build_extraction_prompt(extraction_schema, preprocessed_doc)
+                
+                response = bedrock_client.invoke_model(
+                    model_id = "anthropic.claude-3-sonnet",
+                    body = {
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": 4000
+                    }
+                )
+                
+                extracted_data = parse_response(response)
+                validated_data = validate_extraction(extracted_data, extraction_schema)
+                
+                RETURN {
+                    "status": "success",
+                    "data": validated_data,
+                    "confidence_score": calculate_confidence(response)
+                }
+            ELSE:
+                RETURN {"status": "error", "message": "Unsupported format"}
+                
+        CATCH Exception as e:
+            log_error(e)
+            RETURN {"status": "error", "message": str(e)}
+    
+    FUNCTION build_extraction_prompt(schema, document):
+        prompt = f"""
+        Extract the following fields from this document:
+        Schema: {schema}
+        Document: {document}
+        
+        Return structured JSON with extracted values.
+        If a field is not found, return null.
+        Include confidence scores for each field.
+        """
+        RETURN prompt
